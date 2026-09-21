@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import asyncio
 import threading
 import aiohttp
@@ -11,7 +12,11 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 BYPASS_CHANNEL_ID = 1551336576649396274
 
-BYPASS_API = "https://api.bypass.vip/bypass"
+BYPASS_APIS = [
+    "https://api.bypass.vip/bypass",
+    "https://api.bypass.city/bypass",
+    "https://bypass-api.com/api/bypass",
+]
 
 HEADER_TEXT = (
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -36,7 +41,6 @@ SHORTENERS = (
     "yosh.gg", "spaste.com", "cuty.io", "clk.sh", "clk.wiki", "clickscoin.com"
 )
 
-last_bypass_time = 0
 bypass_lock = asyncio.Lock()
 
 app = Flask(__name__)
@@ -67,25 +71,46 @@ def is_shortener(url):
     return any(domain in url_lower for domain in SHORTENERS)
 
 async def bypass_url(url):
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
     payload = {"url": url}
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(BYPASS_API, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=45)) as r:
-                text = await r.text()
-                try:
-                    data = await r.json()
-                except Exception:
-                    return None, text
-                if isinstance(data, dict):
-                    if data.get("status") == "success" or data.get("success") is True:
-                        result = data.get("result") or data.get("destination") or data.get("url")
-                        return result, None
-                    err = data.get("message") or data.get("error") or text
-                    return None, err
-                return None, text
-    except Exception as e:
-        return None, str(e)
+
+    for api in BYPASS_APIS:
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.post(
+                    api,
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=40)
+                ) as r:
+                    text = await r.text()
+                    try:
+                        data = await r.json()
+                    except Exception:
+                        continue
+
+                    if isinstance(data, dict):
+                        ok = (
+                            data.get("status") == "success"
+                            or data.get("success") is True
+                            or data.get("status") is True
+                        )
+                        if ok:
+                            result = (
+                                data.get("result")
+                                or data.get("destination")
+                                or data.get("url")
+                                or data.get("bypassed")
+                            )
+                            if result:
+                                return result, None
+        except Exception:
+            continue
+
+    return None, "Nenhuma API conseguiu bypassar esse link (pode ter captcha ou estar expirado)."
 
 async def send_pinned_header():
     try:
@@ -114,7 +139,6 @@ async def on_message(message: discord.Message):
     if message.channel.id != BYPASS_CHANNEL_ID:
         return
 
-    # Sempre apaga a mensagem original (seja link ou não)
     try:
         await message.delete()
     except Exception:
@@ -122,7 +146,6 @@ async def on_message(message: discord.Message):
 
     url = extract_url(message.content)
 
-    # Se não for link de encurtador → avisa e apaga
     if not url or not is_shortener(url):
         try:
             warn = await message.channel.send(
@@ -135,26 +158,34 @@ async def on_message(message: discord.Message):
             pass
         return
 
-    # Cooldown de 10s entre bypasses (global)
-    global last_bypass_time
     async with bypass_lock:
-        now = time.time()
-        wait = 10 - (now - last_bypass_time)
-        if wait > 0:
-            try:
-                warn = await message.channel.send(
-                    f"⏳ Aguarde **{wait:.1f}s** para o próximo bypass / Wait **{wait:.1f}s** for next bypass"
-                )
-                await asyncio.sleep(wait)
-                await warn.delete()
-            except Exception:
-                pass
-        last_bypass_time = time.time()
+        wait_time = random.randint(20, 30)
 
-    # Executa o bypass e mede o tempo
-    start = time.time()
-    result, err = await bypass_url(url)
-    elapsed = time.time() - start
+        try:
+            warning = await message.channel.send(
+                f"🔒 {message.author.mention} **Bypass em andamento.**\n"
+                f"⏱️ Aguarde **{wait_time}s** para a verificação de segurança.\n"
+                f"⏱️ Please wait **{wait_time}s** for security verification."
+            )
+        except Exception:
+            warning = None
+
+        start = time.time()
+        result, err = await bypass_url(url)
+        elapsed = time.time() - start
+
+        remaining = wait_time - elapsed
+        if remaining > 0:
+            for _ in range(int(remaining)):
+                await asyncio.sleep(1)
+
+        try:
+            if warning:
+                await warning.delete()
+        except Exception:
+            pass
+
+    total_time = time.time() - start
 
     if result:
         embed = discord.Embed(
@@ -163,7 +194,7 @@ async def on_message(message: discord.Message):
         )
         embed.add_field(name="Link Original", value=f"`{url}`", inline=False)
         embed.add_field(name="Link Final", value=result, inline=False)
-        embed.add_field(name="⏱️ Tempo / Time", value=f"{elapsed:.2f}s", inline=False)
+        embed.add_field(name="⏱️ Tempo total / Total time", value=f"{total_time:.2f}s", inline=False)
         embed.set_footer(text=f"Pedido por {message.author.name}")
         msg = await message.channel.send(embed=embed)
     else:
@@ -173,7 +204,7 @@ async def on_message(message: discord.Message):
             color=0xef4444
         )
         embed.add_field(name="Link Original", value=f"`{url}`", inline=False)
-        embed.add_field(name="⏱️ Tempo / Time", value=f"{elapsed:.2f}s", inline=False)
+        embed.add_field(name="⏱️ Tempo total / Total time", value=f"{total_time:.2f}s", inline=False)
         embed.set_footer(text=f"Pedido por {message.author.name}")
         msg = await message.channel.send(embed=embed)
 
