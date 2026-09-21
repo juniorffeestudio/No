@@ -69,7 +69,7 @@ async def bypass_url(url):
                     if result:
                         return result, None
                     return None, data.get("message", "sem resultado")
-                return None, "resposta inválida"
+                return None, "resposta invalida"
     except Exception as e:
         return None, str(e)
 
@@ -103,7 +103,7 @@ async def on_message(message: discord.Message):
         wait_time = random.randint(20, 30)
         try:
             notice = await message.channel.send(
-                f"🔒 {message.author.mention} Aguarde **{wait_time}s** para verificação de segurança."
+                f"🔒 {message.author.mention} Aguarde **{wait_time}s** para verificacao de seguranca."
             )
         except Exception:
             notice = None
@@ -125,7 +125,7 @@ async def on_message(message: discord.Message):
     total = time.time() - start
 
     if result:
-        embed = discord.Embed(title="🔓 Bypass Concluído", color=0x22c55e)
+        embed = discord.Embed(title="🔓 Bypass Concluido", color=0x22c55e)
         embed.add_field(name="Original", value=f"`{url}`", inline=False)
         embed.add_field(name="Final", value=result, inline=False)
         embed.add_field(name="Tempo", value=f"{total:.2f}s", inline=False)
