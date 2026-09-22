@@ -92,7 +92,7 @@ async def on_message(message: discord.Message):
     url = extract_url(message.content)
     if not url or not is_shortener(url):
         try:
-            w = await message.channel.send(f"⚠️ {message.author.mention} Bypass only.")
+            w = await message.channel.send(f"Aviso: {message.author.mention} Bypass only.")
             await asyncio.sleep(6)
             await w.delete()
         except Exception:
@@ -103,7 +103,7 @@ async def on_message(message: discord.Message):
         wait_time = random.randint(20, 30)
         try:
             notice = await message.channel.send(
-                f"🔒 {message.author.mention} Aguarde **{wait_time}s** para verificacao de seguranca."
+                f"Bypass em andamento. Aguarde {wait_time}s."
             )
         except Exception:
             notice = None
@@ -125,12 +125,12 @@ async def on_message(message: discord.Message):
     total = time.time() - start
 
     if result:
-        embed = discord.Embed(title="🔓 Bypass Concluido", color=0x22c55e)
+        embed = discord.Embed(title="Bypass Concluido", color=0x22c55e)
         embed.add_field(name="Original", value=f"`{url}`", inline=False)
         embed.add_field(name="Final", value=result, inline=False)
         embed.add_field(name="Tempo", value=f"{total:.2f}s", inline=False)
     else:
-        embed = discord.Embed(title="❌ Falha no Bypass", color=0xef4444)
+        embed = discord.Embed(title="Falha no Bypass", color=0xef4444)
         embed.add_field(name="Original", value=f"`{url}`", inline=False)
         embed.add_field(name="Motivo", value=f"`{err}`", inline=False)
         embed.add_field(name="Tempo", value=f"{total:.2f}s", inline=False)
