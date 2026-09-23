@@ -10,7 +10,12 @@ from flask import Flask
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 BYPASS_CHANNEL_ID = 1551336576649396274
-BYPASS_API = "https://api.bypass.vip/bypass"
+
+BYPASS_APIS = [
+    "https://api.bypass.city/bypass",
+    "https://api.bypass.vip/bypass",
+    "https://bypass-api.com/api/bypass",
+]
 
 app = Flask(__name__)
 
@@ -76,11 +81,9 @@ SERVICES_MSG = (
 )
 
 SHORTENERS = (
-    # keysystem
     "platorelay.com", "platoboost.app", "platoboost.me", "pandauth.com",
     "pandadevelopment.net", "trigonevo.com", "violated.lol",
     "blox-script.com", "boblox-script.com", "hydrogen.lat", "codex.lol",
-    # adlink
     "linkvertise.com", "link-to.net", "link-hub.net", "link-target.org",
     "link-target.net", "link-center.net", "direct-link.net", "loot-link.com",
     "lootlabs.gg", "lootdest.org", "free-content.pro", "lootdest.com",
@@ -96,7 +99,6 @@ SHORTENERS = (
     "mdlinkshub.com", "nswfbox.com", "thhaven.net", "onlymega.co",
     "goldmega.online", "onlyfunlink.com", "rbxdrops.org", "leaksmix.com",
     "darkmodz-links.com", "megaplugleaks.com",
-    # outros comuns
     "adf.ly", "adfoc.us", "shrinkme.io", "shrinkearn.com", "shorte.st",
     "bc.vc", "ouo.io", "ouo.press", "exe.io", "exey.io", "sub2unlock.net",
     "sub2unlock.com", "sub2get.com", "boost.ink", "boostlink.pro",
@@ -149,30 +151,40 @@ async def fetch_paste(url):
         return None, str(e)
 
 async def bypass_url(url):
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
     payload = {"url": url}
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(
-                BYPASS_API,
-                headers=headers,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=45)
-            ) as r:
-                text = await r.text()
-                try:
-                    data = await r.json(content_type=None)
-                except Exception:
-                    return None, f"HTTP {r.status}"
-                if isinstance(data, dict):
-                    if data.get("status") == "success" or data.get("success") is True:
-                        result = data.get("result") or data.get("destination") or data.get("url")
-                        if result:
-                            return result, None
-                    return None, data.get("message") or data.get("error") or "sem resultado"
-                return None, "resposta invalida"
-    except Exception as e:
-        return None, str(e)
+
+    for api in BYPASS_APIS:
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.post(
+                    api,
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=45)
+                ) as r:
+                    text = await r.text()
+                    try:
+                        data = await r.json(content_type=None)
+                    except Exception:
+                        continue
+
+                    if isinstance(data, dict):
+                        if data.get("status") == "success" or data.get("success") is True:
+                            result = data.get("result") or data.get("destination") or data.get("url")
+                            if result:
+                                return result, None
+                        err = data.get("message") or data.get("error") or "sem resultado"
+                        if "hcaptcha" in str(err).lower() or "captcha" in str(err).lower():
+                            return None, "Este link usa hCaptcha. APIs gratuitas não conseguem resolver. Use o navegador."
+                        return None, err
+        except Exception:
+            continue
+
+    return None, "Nenhuma API conseguiu bypassar. Link pode estar expirado ou bloqueado."
 
 async def send_pinned_messages():
     try:
