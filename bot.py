@@ -9,12 +9,12 @@ from discord.ext import commands
 from flask import Flask
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+CAPSOLVER_KEY = os.getenv("CAPSOLVER_KEY", "")
 BYPASS_CHANNEL_ID = 1551336576649396274
 
 BYPASS_APIS = [
     "https://api.bypass.city/bypass",
     "https://api.bypass.vip/bypass",
-    "https://bypass-api.com/api/bypass",
 ]
 
 app = Flask(__name__)
@@ -156,6 +156,10 @@ async def bypass_url(url):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
     payload = {"url": url}
+    if CAPSOLVER_KEY:
+        payload["captchaKey"] = CAPSOLVER_KEY
+
+    last_err = "Nenhuma API conseguiu bypassar."
 
     for api in BYPASS_APIS:
         try:
@@ -164,12 +168,13 @@ async def bypass_url(url):
                     api,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=45)
+                    timeout=aiohttp.ClientTimeout(total=90)
                 ) as r:
                     text = await r.text()
                     try:
                         data = await r.json(content_type=None)
                     except Exception:
+                        last_err = f"HTTP {r.status}"
                         continue
 
                     if isinstance(data, dict):
@@ -177,14 +182,12 @@ async def bypass_url(url):
                             result = data.get("result") or data.get("destination") or data.get("url")
                             if result:
                                 return result, None
-                        err = data.get("message") or data.get("error") or "sem resultado"
-                        if "hcaptcha" in str(err).lower() or "captcha" in str(err).lower():
-                            return None, "Este link usa hCaptcha. APIs gratuitas não conseguem resolver. Use o navegador."
-                        return None, err
-        except Exception:
+                        last_err = data.get("message") or data.get("error") or "sem resultado"
+        except Exception as e:
+            last_err = str(e)
             continue
 
-    return None, "Nenhuma API conseguiu bypassar. Link pode estar expirado ou bloqueado."
+    return None, last_err
 
 async def send_pinned_messages():
     try:
@@ -214,6 +217,7 @@ async def send_pinned_messages():
 @bot.event
 async def on_ready():
     print(f"Bot online: {bot.user}")
+    print(f"CapSolver: {'ATIVO' if CAPSOLVER_KEY else 'DESATIVADO'}")
     await bot.change_presence(activity=discord.Game(name="auto-bypass"))
     await send_pinned_messages()
 
