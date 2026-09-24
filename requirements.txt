@@ -1,5 +1,3 @@
 discord.py
 aiohttp
 flask
-playwright
-auto-captcha-solver
